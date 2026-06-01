@@ -39,3 +39,17 @@ pipeline {
         }
     }
 }
+stage('Live Cluster Monitor') {
+            steps {
+                script {
+                    echo "--- NODE HEALTH & IP ADDRESSES ---"
+                    sh 'kubectl get nodes -o wide'
+                    
+                    echo "--- RESOURCE USAGE (CPU/MEM) ---"
+                    sh 'kubectl top nodes || echo "Metrics server not found"'
+                    
+                    echo "--- RUNNING SERVICES ---"
+                    sh 'kubectl get svc'
+                }
+            }
+        }
