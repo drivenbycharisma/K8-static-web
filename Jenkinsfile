@@ -16,6 +16,25 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
+                script {
+                    // 1. Get Cluster Node Status formatted into an HTML string
+                    def nodeStatus = sh(script: "kubectl get nodes -o wide", returnStdout: true).trim()
+                    
+                    // 2. Get Cluster Metrics (or placeholder if metrics-server isn't running)
+                    def clusterMetrics = sh(script: "kubectl top nodes || echo 'Metrics engine initializing or unavailable...'", returnStdout: true).trim()
+
+                    // 3. Inject the data into index.html dynamically before building the image
+                    sh """
+                    echo '<hr>' >> index.html
+                    echo '<div style="margin-top: 20px; font-family: monospace; background: #222; color: #0f0; padding: 15px; border-radius: 5px; text-align: left; max-width: 800px; margin-left: auto; margin-right: auto; overflow-x: auto;">' >> index.html
+                    echo '<h3>STAGE MONITORING: KUBERNETES LIVE NODE STATUS</h3>' >> index.html
+                    echo '<pre>${nodeStatus}</pre>' >> index.html
+                    echo '<h3>STAGE MONITORING: CLUSTER CPU & MEMORY METRICS</h3>' >> index.html
+                    echo '<pre>${clusterMetrics}</pre>' >> index.html
+                    echo '</div>' >> index.html
+                    """
+                }
+                // 4. Build and tag the updated image containing the live text data
                 sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} ."
                 sh "docker tag ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest"
             }
@@ -53,5 +72,5 @@ pipeline {
                 }
             }
         }
-    } // <-- The main stages block now correctly closes down here, keeping everything bundled together!
+    }
 }
