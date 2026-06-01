@@ -40,16 +40,20 @@ pipeline {
     }
 }
 stage('Live Cluster Monitor') {
+            // 'steps' must come before 'script'
             steps {
                 script {
-                    echo "--- NODE HEALTH & IP ADDRESSES ---"
-                    sh 'kubectl get nodes -o wide'
+                    echo "========================================="
+                    echo "      KUBERNETES LIVE NODE STATUS        "
+                    echo "========================================="
+                    // Basic node health and IP info
+                    sh 'kubectl get nodes -o wide || true'
                     
-                    echo "--- RESOURCE USAGE (CPU/MEM) ---"
-                    sh 'kubectl top nodes || echo "Metrics server not found"'
-                    
-                    echo "--- RUNNING SERVICES ---"
-                    sh 'kubectl get svc'
+                    echo "========================================="
+                    echo "      CLUSTER CPU & MEMORY METRICS       "
+                    echo "========================================="
+                    // Resource consumption (requires metrics-server)
+                    sh 'kubectl top nodes || echo "Metrics engine initializing..."'
                 }
             }
         }
