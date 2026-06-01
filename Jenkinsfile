@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_HUB_USER = 'asmichugh55677'  // Updated with your username!
+        DOCKER_HUB_USER = 'asmichugh55677'  
         IMAGE_NAME      = 'static-web-app'
         IMAGE_TAG       = "${BUILD_NUMBER}"
     }
@@ -37,23 +37,21 @@ pipeline {
                 sh "kubectl apply -f static-app.yaml"
             }
         }
-    }
-}
-stage('Live Cluster Monitor') {
-            // 'steps' must come before 'script'
+
+        stage('Live Cluster Monitor') {
             steps {
                 script {
                     echo "========================================="
                     echo "      KUBERNETES LIVE NODE STATUS        "
                     echo "========================================="
-                    // Basic node health and IP info
                     sh 'kubectl get nodes -o wide || true'
                     
                     echo "========================================="
                     echo "      CLUSTER CPU & MEMORY METRICS       "
                     echo "========================================="
-                    // Resource consumption (requires metrics-server)
                     sh 'kubectl top nodes || echo "Metrics engine initializing..."'
                 }
             }
         }
+    } // <-- The main stages block now correctly closes down here, keeping everything bundled together!
+}
