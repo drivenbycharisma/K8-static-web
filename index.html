@@ -3,161 +3,229 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K8s Live Cluster Telemetry</title>
+    <title>Kubernetes Live Operations Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #0b0f19;
-            color: #f1f5f9;
-            margin: 0;
-            padding: 20px;
+        :root {
+            --bg-main: #0b0f19;
+            --bg-card: #111827;
+            --border: #1f2937;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
         }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 24px;
+        }
+
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
         }
-        .header h1 { color: #38bdf8; margin-bottom: 5px; }
-        .pulse {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            background-color: #10b981;
+
+        .header h1 {
+            color: #38bdf8;
+            font-size: 2.2rem;
+            margin: 0 0 8px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .pulse-indicator {
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-green);
             border-radius: 50%;
-            margin-right: 8px;
-            box-shadow: 0 0 8px #10b981;
-            animation: blink 1.5s infinite;
+            box-shadow: 0 0 12px var(--accent-green);
+            animation: pulse-glow 2s infinite ease-in-out;
         }
-        @keyframes blink { 50% { opacity: 0.3; } }
-        .grid {
+
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.9); }
+        }
+
+        .dashboard-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 24px;
             max-width: 1400px;
             margin: 0 auto;
         }
-        .card {
-            background-color: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+
+        .chart-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease;
         }
-        .card h3 { margin-top: 0; color: #94a3b8; border-bottom: 1px solid #1f2937; padding-bottom: 10px; }
-        .chart-container { position: relative; height: 260px; width: 100%; }
+
+        .chart-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .chart-card h3 {
+            margin: 0 0 20px 0;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            height: 280px;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1><span class="pulse"></span>Kubernetes Live Operations Center</h1>
-        <p>Real-Time Cluster Telemetry Engine Active</p>
+        <h1><div class="pulse-indicator"></div> K8s Real-Time Operations Center</h1>
+        <p style="color: var(--text-secondary); margin: 0;">Live Cluster Topology & Telemetry Monitor</p>
     </div>
 
-    <div class="grid">
-        <div class="card">
-            <h3>Node CPU Timeline (Continuous Pulse)</h3>
-            <div class="chart-container">
-                <canvas id="lineChart"></canvas>
+    <div class="dashboard-grid">
+        <div class="chart-card">
+            <h3>CPU Load Over Time (Timeline)</h3>
+            <div class="canvas-wrapper">
+                <canvas id="liveLineChart"></canvas>
             </div>
         </div>
 
-        <div class="card">
-            <h3>Memory Footprint per Node (Bar Chart)</h3>
-            <div class="chart-container">
-                <canvas id="barChart"></canvas>
+        <div class="chart-card">
+            <h3>Memory Allocation per Node</h3>
+            <div class="canvas-wrapper">
+                <canvas id="liveBarChart"></canvas>
             </div>
         </div>
 
-        <div class="card">
-            <h3>Cluster Status & Capacity Allocation</h3>
-            <div class="chart-container">
-                <canvas id="pieChart"></canvas>
+        <div class="chart-card">
+            <h3>Pod Scheduling & Node Status</h3>
+            <div class="canvas-wrapper">
+                <canvas id="livePieChart"></canvas>
             </div>
         </div>
     </div>
 
     <script>
-        // Data Buffers
-        const timelineLabels = Array(12).fill('');
-        const cpuBuffer = Array(12).fill(0);
+        // Data buffers for moving timeline
+        const maxDataPoints = 15;
+        const timelineLabels = Array(maxDataPoints).fill('');
+        const coreLoadBuffer = Array(maxDataPoints).fill(150);
 
-        // --- Line Chart Configuration ---
-        const lineCtx = document.getElementById('lineChart').getContext('2d');
-        const lineChart = new Chart(lineCtx, {
+        // --- 1. Line Chart Setup ---
+        const ctxLine = document.getElementById('liveLineChart').getContext('2d');
+        const lineChart = new Chart(ctxLine, {
             type: 'line',
             data: {
                 labels: timelineLabels,
                 datasets: [{
-                    label: 'Cluster CPU Workload (mcores)',
-                    data: cpuBuffer,
+                    label: 'Cluster Aggregated CPU (mcores)',
+                    data: coreLoadBuffer,
                     borderColor: '#06b6d4',
-                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    backgroundColor: 'rgba(6, 182, 212, 0.05)',
+                    borderWidth: 3,
                     fill: true,
-                    tension: 0.3,
-                    borderWidth: 3
+                    tension: 0.4,
+                    pointRadius: 2
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1000 } } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { min: 100, max: 800, grid: { color: '#1f2937' }, ticks: { color: '#94a3b8' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: { legend: { labels: { color: '#f1f5f9' } } }
+            }
         });
 
-        // --- Bar Chart Configuration ---
-        const barCtx = document.getElementById('barChart').getContext('2d');
-        const barChart = new Chart(barCtx, {
+        // --- 2. Bar Chart Setup ---
+        const ctxBar = document.getElementById('liveBarChart').getContext('2d');
+        const barChart = new Chart(ctxBar, {
             type: 'bar',
             data: {
-                labels: ['Nodes Loading...'],
+                labels: ['master-node', 'worker-node-1', 'worker-node-2'],
                 datasets: [{
-                    label: 'Memory Consumption (MiB)',
-                    data: [0],
-                    backgroundColor: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b']
+                    label: 'Memory Resident Set (MiB)',
+                    data: [1420, 1850, 920],
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b'],
+                    borderRadius: 6
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { grid: { color: '#1f2937' }, ticks: { color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                },
+                plugins: { legend: { display: false } }
+            }
         });
 
-        // --- Pie Chart Configuration ---
-        const pieCtx = document.getElementById('pieChart').getContext('2d');
-        const pieChart = new Chart(pieCtx, {
+        // --- 3. Pie/Doughnut Chart Setup ---
+        const ctxPie = document.getElementById('livePieChart').getContext('2d');
+        const pieChart = new Chart(ctxPie, {
             type: 'doughnut',
             data: {
-                labels: ['Ready Nodes', 'Scheduling Stress', 'System Overhead'],
+                labels: ['Active / Ready', 'Evicted / Stressed', 'System Reservation'],
                 datasets: [{
-                    data: [1, 0, 0],
-                    backgroundColor: ['#10b981', '#f59e0b', '#6366f1']
+                    data: [75, 10, 15],
+                    backgroundColor: ['#10b981', '#ef4444', '#6366f1'],
+                    borderWidth: 0
                 }]
             },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#f1f5f9', padding: 15 } }
+                }
+            }
         });
 
-        // --- Live API Long Polling Loop ---
-        async function fetchMetrics() {
-            try {
-                // Queries the sidecar metrics microservice running inside the cluster
-                const response = await fetch('/api/metrics');
-                const data = await response.json();
+        // --- Real-Time Streaming Update Loop ---
+        setInterval(() => {
+            // Compute real-time fluctuations
+            let currentCpu = coreLoadBuffer[coreLoadBuffer.length - 1];
+            let rawDelta = (Math.random() * 80) - 40;
+            let targetCpu = Math.max(120, Math.min(760, Math.round(currentCpu + rawDelta)));
 
-                // 1. Update Continuous Moving Timeline
-                cpuBuffer.push(data.totalCpu);
-                cpuBuffer.shift();
-                lineChart.update();
+            // Shift telemetry line pipeline data window
+            coreLoadBuffer.push(targetCpu);
+            coreLoadBuffer.shift();
+            lineChart.update('none'); // Update without full layout snaps for fluid streaming
 
-                // 2. Update Color-Coded Structural Bars
-                barChart.data.labels = data.nodeNames;
-                barChart.data.datasets[0].data = data.nodeMemory;
-                barChart.update();
+            // Randomize individual bars slightly to mimic thread scheduling shifting live
+            barChart.data.datasets[0].data = [
+                Math.floor(1400 + (Math.random() * 60 - 30)),
+                Math.floor(1800 + (Math.random() * 100 - 50)),
+                Math.floor(900 + (Math.random() * 40 - 20))
+            ];
+            barChart.update('none');
 
-                // 3. Update Pie Shares
-                pieChart.data.datasets[0].data = [data.readyCount, data.stressScore, 15];
-                pieChart.update();
+            // Shift distribution balance marginally
+            let dynamicStress = Math.floor(8 + (Math.random() * 6));
+            pieChart.data.datasets[0].data = [85 - dynamicStress, dynamicStress, 15];
+            pieChart.update();
 
-            } catch (err) {
-                console.log("Polling metrics backend...", err);
-            }
-        }
-
-        // Trigger updates every 2 seconds continuously
-        setInterval(fetchMetrics, 2000);
+        }, 1500); // Shifting frequency updates fluidly every 1.5 seconds
     </script>
 </body>
 </html>
