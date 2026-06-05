@@ -3,30 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Custom K8s Application</title>
+    <title>K8s Live Cluster Telemetry</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f6f9;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #0b0f19;
+            color: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+        }
+        .header {
             text-align: center;
-            padding: 50px;
+            margin-bottom: 30px;
         }
-        .container {
-            background-color: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        .header h1 { color: #38bdf8; margin-bottom: 5px; }
+        .pulse {
             display: inline-block;
+            width: 10px;
+            height: 10px;
+            background-color: #10b981;
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 0 8px #10b981;
+            animation: blink 1.5s infinite;
         }
-        h1 { color: #326ce5; }
-        p { color: #555; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .card h3 { margin-top: 0; color: #94a3b8; border-bottom: 1px solid #1f2937; padding-bottom: 10px; }
+        .chart-container { position: relative; height: 260px; width: 100%; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Hello!! from My Automated Kubernetes Cluster!</h1>
-        <p>This deployment is managed entirely by Jenkins CI/CD.</p>
-        <p><strong>Current Status:</strong> Running smoothly on an Nginx container!</p>
+
+    <div class="header">
+        <h1><span class="pulse"></span>Kubernetes Live Operations Center</h1>
+        <p>Real-Time Cluster Telemetry Engine Active</p>
     </div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Node CPU Timeline (Continuous Pulse)</h3>
+            <div class="chart-container">
+                <canvas id="lineChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Memory Footprint per Node (Bar Chart)</h3>
+            <div class="chart-container">
+                <canvas id="barChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Cluster Status & Capacity Allocation</h3>
+            <div class="chart-container">
+                <canvas id="pieChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Buffers
+        const timelineLabels = Array(12).fill('');
+        const cpuBuffer = Array(12).fill(0);
+
+        // --- Line Chart Configuration ---
+        const lineCtx = document.getElementById('lineChart').getContext('2d');
+        const lineChart = new Chart(lineCtx, {
+            type: 'line',
+            data: {
+                labels: timelineLabels,
+                datasets: [{
+                    label: 'Cluster CPU Workload (mcores)',
+                    data: cpuBuffer,
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    borderWidth: 3
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1000 } } }
+        });
+
+        // --- Bar Chart Configuration ---
+        const barCtx = document.getElementById('barChart').getContext('2d');
+        const barChart = new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Nodes Loading...'],
+                datasets: [{
+                    label: 'Memory Consumption (MiB)',
+                    data: [0],
+                    backgroundColor: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        // --- Pie Chart Configuration ---
+        const pieCtx = document.getElementById('pieChart').getContext('2d');
+        const pieChart = new Chart(pieCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Ready Nodes', 'Scheduling Stress', 'System Overhead'],
+                datasets: [{
+                    data: [1, 0, 0],
+                    backgroundColor: ['#10b981', '#f59e0b', '#6366f1']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        // --- Live API Long Polling Loop ---
+        async function fetchMetrics() {
+            try {
+                // Queries the sidecar metrics microservice running inside the cluster
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+
+                // 1. Update Continuous Moving Timeline
+                cpuBuffer.push(data.totalCpu);
+                cpuBuffer.shift();
+                lineChart.update();
+
+                // 2. Update Color-Coded Structural Bars
+                barChart.data.labels = data.nodeNames;
+                barChart.data.datasets[0].data = data.nodeMemory;
+                barChart.update();
+
+                // 3. Update Pie Shares
+                pieChart.data.datasets[0].data = [data.readyCount, data.stressScore, 15];
+                pieChart.update();
+
+            } catch (err) {
+                console.log("Polling metrics backend...", err);
+            }
+        }
+
+        // Trigger updates every 2 seconds continuously
+        setInterval(fetchMetrics, 2000);
+    </script>
 </body>
 </html>
