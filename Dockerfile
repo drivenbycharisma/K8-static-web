@@ -1,11 +1,15 @@
-# Use the ultra-lightweight Alpine Linux version of Nginx
-FROM nginx:alpine
+FROM node:18-alpine
 
-# Remove the default Nginx welcome page
-RUN rm /usr/share/nginx/html/index.html
+# Install kubectl directly into the container so it can poll its own cluster
+RUN apk add --no-cache curl \
+    && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
 
-# Copy our custom index.html into the Nginx web directory
-COPY index.html /usr/share/nginx/html/index.html
+WORKDIR /app
+COPY package*.json ./
+RUN npm install express
+COPY . .
 
-# Expose port 80 so traffic can access the container
 EXPOSE 80
+CMD ["node", "metrics-server.js"]
