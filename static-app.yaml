@@ -5,23 +5,38 @@ metadata:
   labels:
     app: static-web
 spec:
-  replicas: 2  # Runs two instances of your app across your worker nodes for redundancy
+  replicas: 3 # High availability: runs 3 copies across your nodes
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1       # Allows 1 extra pod to spin up during deployment
+      maxUnavailable: 0 # Ensures 0 downtime; never kills an old pod until the new one passes health checks
   selector:
     matchLabels:
       app: static-web
-  strategy:
-    type: RollingUpdate  # Enables seamless zero-downtime updates when code changes
   template:
     metadata:
       labels:
         app: static-web
     spec:
       containers:
-      - name: web-container
-        image: asmichugh55677/static-web-app:latest  # Jenkins will dynamically change 'latest' to build numbers
-        imagePullPolicy: Always
+      - name: static-web-container
+        image: asmichugh55677/static-web-app:latest
         ports:
         - containerPort: 80
+        # --- HEALTH CHECKS ---
+        readinessProbe: # Checks if the container is ready to receive web traffic
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe: # Checks if the container has frozen/crashed and needs a restart
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -29,9 +44,9 @@ metadata:
   name: static-web-service
 spec:
   type: NodePort
-  ports:
-    - port: 80
-      targetPort: 80
-      nodePort: 30008  # Access your application via this external port
   selector:
     app: static-web
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30008 # Public port
